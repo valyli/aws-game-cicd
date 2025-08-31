@@ -194,7 +194,6 @@ nohup /opt/spot-interruption-handler.sh > /var/log/spot-handler.log 2>&1 &
                 instances_distribution=autoscaling.InstancesDistribution(
                     on_demand_base_capacity=0,
                     on_demand_percentage_above_base_capacity=0,  # 100% Spot
-                    spot_allocation_strategy=autoscaling.SpotAllocationStrategy.DIVERSIFIED,
                     spot_instance_pools=4,
                 ),
                 launch_template_overrides=[
@@ -231,24 +230,8 @@ nohup /opt/spot-interruption-handler.sh > /var/log/spot-handler.log 2>&1 &
     def _add_scaling_policies(self):
         """Add scaling policies for the Auto Scaling Group."""
         
-        # Scale up policy
-        scale_up_policy = self.jenkins_agent_asg.scale_on_metric(
-            "ScaleUp",
-            metric=self.jenkins_agent_asg.metric_cpu_utilization(),
-            scaling_steps=[
-                autoscaling.ScalingInterval(upper=50, change=1),
-                autoscaling.ScalingInterval(lower=50, upper=85, change=2),
-                autoscaling.ScalingInterval(lower=85, change=3),
-            ],
-            adjustment_type=autoscaling.AdjustmentType.CHANGE_IN_CAPACITY,
-        )
-        
-        # Scale down policy
-        scale_down_policy = self.jenkins_agent_asg.scale_on_metric(
-            "ScaleDown",
-            metric=self.jenkins_agent_asg.metric_cpu_utilization(),
-            scaling_steps=[
-                autoscaling.ScalingInterval(upper=10, change=-1),
-            ],
-            adjustment_type=autoscaling.AdjustmentType.CHANGE_IN_CAPACITY,
+        # Scale on CPU utilization
+        self.jenkins_agent_asg.scale_on_cpu_utilization(
+            "CPUScaling",
+            target_utilization_percent=70,
         )

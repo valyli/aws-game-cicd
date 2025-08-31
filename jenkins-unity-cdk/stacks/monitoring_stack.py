@@ -41,14 +41,14 @@ class MonitoringStack(Stack):
         self.jenkins_master_log_group = logs.LogGroup(
             self, "JenkinsMasterLogGroup",
             log_group_name=f"/aws/jenkins/master/{self.config['project_prefix']}",
-            retention=logs.RetentionDays(self.config["monitoring"]["log_retention_days"]),
+            retention=logs.RetentionDays.ONE_MONTH,
         )
         
         # Jenkins Agents log group
         self.jenkins_agents_log_group = logs.LogGroup(
             self, "JenkinsAgentsLogGroup",
             log_group_name=f"/aws/jenkins/agents/{self.config['project_prefix']}",
-            retention=logs.RetentionDays(self.config["monitoring"]["log_retention_days"]),
+            retention=logs.RetentionDays.ONE_MONTH,
         )
         
         # Cache Pool Lambda log groups are created automatically by Lambda functions

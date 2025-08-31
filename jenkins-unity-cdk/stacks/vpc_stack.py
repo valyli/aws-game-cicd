@@ -123,6 +123,8 @@ class VpcStack(Stack):
         
         # Configure security group rules
         self._configure_security_group_rules()
+        
+        # No cross-references needed with CIDR-based rules
 
     def _configure_security_group_rules(self):
         """Configure security group ingress and egress rules."""
@@ -135,26 +137,26 @@ class VpcStack(Stack):
             description="SSH access"
         )
         
-        # HTTP from ALB
+        # HTTP from ALB (using CIDR instead of SG reference)
         self.jenkins_master_sg.add_ingress_rule(
-            peer=ec2.Peer.security_group_id(self.alb_sg.security_group_id),
+            peer=ec2.Peer.ipv4(self.config["vpc"]["cidr"]),
             connection=ec2.Port.tcp(8080),
-            description="HTTP from ALB"
+            description="HTTP from VPC"
         )
         
-        # JNLP from agents
+        # JNLP from agents (using CIDR instead of SG reference)
         self.jenkins_master_sg.add_ingress_rule(
-            peer=ec2.Peer.security_group_id(self.jenkins_agent_sg.security_group_id),
+            peer=ec2.Peer.ipv4(self.config["vpc"]["cidr"]),
             connection=ec2.Port.tcp(50000),
-            description="JNLP from agents"
+            description="JNLP from VPC"
         )
         
         # Jenkins Agent Security Group Rules
-        # SSH from Jenkins Master
+        # SSH from VPC
         self.jenkins_agent_sg.add_ingress_rule(
-            peer=ec2.Peer.security_group_id(self.jenkins_master_sg.security_group_id),
+            peer=ec2.Peer.ipv4(self.config["vpc"]["cidr"]),
             connection=ec2.Port.tcp(22),
-            description="SSH from Jenkins Master"
+            description="SSH from VPC"
         )
         
         # ALB Security Group Rules
@@ -172,17 +174,10 @@ class VpcStack(Stack):
             description="HTTPS from anywhere"
         )
         
-        # HTTP to Jenkins Master
-        self.alb_sg.add_egress_rule(
-            peer=ec2.Peer.security_group_id(self.jenkins_master_sg.security_group_id),
-            connection=ec2.Port.tcp(8080),
-            description="HTTP to Jenkins Master"
-        )
-        
         # EFS Security Group Rules
-        # NFS from Jenkins Master
+        # NFS from VPC
         self.efs_sg.add_ingress_rule(
-            peer=ec2.Peer.security_group_id(self.jenkins_master_sg.security_group_id),
+            peer=ec2.Peer.ipv4(self.config["vpc"]["cidr"]),
             connection=ec2.Port.tcp(2049),
-            description="NFS from Jenkins Master"
+            description="NFS from VPC"
         )
