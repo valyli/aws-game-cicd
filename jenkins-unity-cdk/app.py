@@ -5,6 +5,8 @@ import os
 import aws_cdk as cdk
 from stacks.config_loader import ConfigLoader
 from stacks.vpc_stack import VpcStack
+from stacks.storage_stack import StorageStack
+from stacks.iam_stack import IamStack
 
 
 def main():
@@ -36,6 +38,26 @@ def main():
         config=config,
         env=env,
         description=f"VPC infrastructure for {config['project_prefix']} Jenkins Unity CI/CD"
+    )
+    
+    # Create Storage Stack
+    storage_stack = StorageStack(
+        app,
+        config["resource_namer"]("storage-stack"),
+        config=config,
+        vpc_stack=vpc_stack,
+        env=env,
+        description=f"Storage infrastructure for {config['project_prefix']} Jenkins Unity CI/CD"
+    )
+    storage_stack.add_dependency(vpc_stack)
+    
+    # Create IAM Stack
+    iam_stack = IamStack(
+        app,
+        config["resource_namer"]("iam-stack"),
+        config=config,
+        env=env,
+        description=f"IAM roles and policies for {config['project_prefix']} Jenkins Unity CI/CD"
     )
     
     # Add tags to all resources
