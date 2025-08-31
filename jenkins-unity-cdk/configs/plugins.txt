@@ -1,0 +1,98 @@
+# Jenkins plugins for Unity CI/CD
+# Core plugins
+ant:475.vf34069fef73c
+build-timeout:1.31
+credentials-binding:681.vf91669a_32e45
+timestamper:1.26
+ws-cleanup:0.45
+gradle:2.8.2
+workflow-aggregator:596.v8c21c963d92d
+github-branch-source:1728.v859147241f49
+pipeline-github-lib:61.v629f2cc41d83
+pipeline-stage-view:2.33
+git:5.2.1
+ssh-slaves:2.973.v0ee9c7f1f64a
+
+# Unity specific plugins
+unity3d-plugin:1.7
+xvfb:1.1.3
+
+# AWS plugins
+ec2:1.76
+aws-credentials:191.vcb_f183ce58b_9
+
+# Build and deployment
+docker-workflow:580.vc0c340686b_54
+kubernetes:4246.v5a_12b_1fe120e
+pipeline-utility-steps:2.16.0
+
+# Notifications
+slack:664.vc9a_90f8b_c24a_
+email-ext:2.102
+mailer:463.vedf8358e006b_
+
+# Code quality and testing
+warnings-ng:10.5.0
+junit:1265.v65b_14fa_f12f0
+jacoco:3.3.4
+sonar:2.16.1
+
+# Security
+matrix-auth:3.2.2
+ldap:682.v7b_544c9d1512
+role-strategy:689.v731678c3e0eb_
+
+# Utilities
+configuration-as-code:1775.v810dc950b_514
+job-dsl:1.87
+build-name-setter:2.4.1
+description-setter:1.10
+environment-injector:2.908.ve4f7b_cec90bd
+parameterized-trigger:2.45
+conditional-buildstep:1.4.3
+run-condition:1.7
+flexible-publish:0.16.1
+copyartifact:722.v0662a_9b_e22a_c
+archive-artifacts:1.3
+workspace-cleanup:0.45
+
+# Monitoring and logging
+monitoring:1.98.0
+log-parser:2.25
+build-monitor-plugin:1.4+build.201809061734
+radiatorview:1.29
+
+# SCM and version control
+git-parameter:0.9.19
+github:1.37.3.1
+bitbucket:223.vd12f2bca5430
+subversion:2.17.3
+
+# Mobile development
+android-emulator:3.0
+xcode-plugin:2.0.15
+
+# Performance and load testing
+performance:3.21
+gatling:1.18.2
+
+# Artifact management
+nexus-artifact-uploader:2.15
+artifactory:3.18.4
+
+# Dashboard and visualization
+dashboard-view:2.503.v4c0c039a_12d4
+view-job-filters:2.7
+nested-view:1.21
+
+# Pipeline enhancements
+pipeline-milestone-step:111.v449306f708b_7
+pipeline-input-step:468.va_5db_051498a_4
+pipeline-build-step:540.vb_e8849e1a_b_d8
+lockable-resources:1131.vb_7c3d377e723
+parallel-test-executor:250.v7da_8f6eb_55dd
+
+# Quality gates
+quality-gates:2.5
+build-failure-analyzer:2.4.1
+naginator:1.18.1

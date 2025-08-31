@@ -1,0 +1,231 @@
+// Unity Game Build Pipeline
+// This Jenkinsfile demonstrates how to build Unity projects using the CI/CD infrastructure
+
+pipeline {
+    agent {
+        label 'unity linux'
+    }
+    
+    parameters {
+        choice(
+            name: 'BUILD_TARGET',
+            choices: ['Android', 'iOS', 'StandaloneLinux64', 'StandaloneWindows64', 'WebGL'],
+            description: 'Target platform for the build'
+        )
+        choice(
+            name: 'BUILD_TYPE',
+            choices: ['Development', 'Release'],
+            description: 'Build configuration'
+        )
+        booleanParam(
+            name: 'RUN_TESTS',
+            defaultValue: true,
+            description: 'Run Unity tests before building'
+        )
+        booleanParam(
+            name: 'CLEAN_BUILD',
+            defaultValue: false,
+            description: 'Clean build (clear cache)'
+        )
+    }
+    
+    environment {
+        UNITY_PATH = '/opt/unity/Editor/Unity'
+        ANDROID_HOME = '/opt/android-sdk'
+        JAVA_HOME = '/usr/lib/jvm/java-17-amazon-corretto'
+        PROJECT_PATH = "${WORKSPACE}"
+        BUILD_PATH = "${WORKSPACE}/Builds"
+        CACHE_PATH = '/mnt/cache'
+    }
+    
+    options {
+        timeout(time: 2, unit: 'HOURS')
+        buildDiscarder(logRotator(numToKeepStr: '10'))
+        skipDefaultCheckout(false)
+    }
+    
+    stages {
+        stage('Preparation') {
+            steps {
+                script {
+                    // Set build name
+                    currentBuild.displayName = "#${BUILD_NUMBER} - ${params.BUILD_TARGET} ${params.BUILD_TYPE}"
+                    
+                    // Clean workspace if requested
+                    if (params.CLEAN_BUILD) {
+                        echo 'Cleaning workspace...'
+                        deleteDir()
+                        checkout scm
+                    }
+                    
+                    // Ensure cache directory exists
+                    sh 'mkdir -p ${CACHE_PATH}/Library'
+                    sh 'mkdir -p ${BUILD_PATH}'
+                }
+            }
+        }
+        
+        stage('Unity License') {
+            steps {
+                script {
+                    echo 'Activating Unity license...'
+                    sh '/opt/activate-unity-license.sh'
+                }
+            }
+        }
+        
+        stage('Cache Setup') {
+            steps {
+                script {
+                    echo 'Setting up Unity cache...'
+                    
+                    // Link Library folder to cache if it doesn't exist
+                    sh '''
+                        if [ ! -L "${PROJECT_PATH}/Library" ] && [ -d "${CACHE_PATH}/Library" ]; then
+                            if [ -d "${PROJECT_PATH}/Library" ]; then
+                                rm -rf "${PROJECT_PATH}/Library"
+                            fi
+                            ln -sf "${CACHE_PATH}/Library" "${PROJECT_PATH}/Library"
+                            echo "Linked Library to cache"
+                        elif [ ! -d "${PROJECT_PATH}/Library" ]; then
+                            ln -sf "${CACHE_PATH}/Library" "${PROJECT_PATH}/Library"
+                            echo "Created Library link to cache"
+                        fi
+                    '''
+                }
+            }
+        }
+        
+        stage('Unity Tests') {
+            when {
+                expression { params.RUN_TESTS }
+            }
+            steps {
+                script {
+                    echo 'Running Unity tests...'
+                    sh '''
+                        ${UNITY_PATH} -batchmode -quit \
+                            -projectPath "${PROJECT_PATH}" \
+                            -runTests \
+                            -testPlatform EditMode \
+                            -testResults "${WORKSPACE}/test-results-editmode.xml" \
+                            -logFile "${WORKSPACE}/unity-editmode-test.log"
+                    '''
+                    
+                    sh '''
+                        ${UNITY_PATH} -batchmode -quit \
+                            -projectPath "${PROJECT_PATH}" \
+                            -runTests \
+                            -testPlatform PlayMode \
+                            -testResults "${WORKSPACE}/test-results-playmode.xml" \
+                            -logFile "${WORKSPACE}/unity-playmode-test.log"
+                    '''
+                }
+            }
+            post {
+                always {
+                    // Publish test results
+                    publishTestResults testResultsPattern: 'test-results-*.xml'
+                    
+                    // Archive test logs
+                    archiveArtifacts artifacts: 'unity-*-test.log', allowEmptyArchive: true
+                }
+            }
+        }
+        
+        stage('Unity Build') {
+            steps {
+                script {
+                    echo "Building Unity project for ${params.BUILD_TARGET}..."
+                    
+                    sh '''
+                        ${UNITY_PATH} -batchmode -quit \
+                            -projectPath "${PROJECT_PATH}" \
+                            -buildTarget ''' + params.BUILD_TARGET + ''' \
+                            -customBuildTarget ''' + params.BUILD_TARGET + ''' \
+                            -customBuildName "''' + env.JOB_NAME + '''-''' + env.BUILD_NUMBER + '''" \
+                            -customBuildPath "${BUILD_PATH}" \
+                            -executeMethod BuildScript.Build \
+                            -logFile "${WORKSPACE}/unity-build.log"
+                    '''
+                }
+            }
+            post {
+                always {
+                    // Archive build logs
+                    archiveArtifacts artifacts: 'unity-build.log', allowEmptyArchive: true
+                }
+                success {
+                    // Archive build artifacts
+                    archiveArtifacts artifacts: 'Builds/**/*', allowEmptyArchive: true
+                }
+            }
+        }
+        
+        stage('Upload to S3') {
+            when {
+                expression { currentBuild.result != 'FAILURE' }
+            }
+            steps {
+                script {
+                    echo 'Uploading build artifacts to S3...'
+                    
+                    def s3Bucket = sh(
+                        script: 'aws cloudformation describe-stacks --stack-name unity-cicd-storage-stack --query "Stacks[0].Outputs[?OutputKey==\'BuildArtifactsBucketName\'].OutputValue" --output text',
+                        returnStdout: true
+                    ).trim()
+                    
+                    def s3Key = "${env.JOB_NAME}/${env.BUILD_NUMBER}/${params.BUILD_TARGET}"
+                    
+                    sh """
+                        aws s3 sync "${BUILD_PATH}" "s3://${s3Bucket}/${s3Key}/" \
+                            --exclude "*.log" \
+                            --metadata "build-number=${env.BUILD_NUMBER},build-target=${params.BUILD_TARGET},build-type=${params.BUILD_TYPE}"
+                    """
+                    
+                    echo "Build artifacts uploaded to: s3://${s3Bucket}/${s3Key}/"
+                }
+            }
+        }
+    }
+    
+    post {
+        always {
+            // Clean up workspace but preserve cache
+            script {
+                echo 'Cleaning up workspace...'
+                sh '''
+                    # Preserve cache by unlinking
+                    if [ -L "${PROJECT_PATH}/Library" ]; then
+                        unlink "${PROJECT_PATH}/Library"
+                    fi
+                    
+                    # Clean build artifacts older than 7 days
+                    find "${BUILD_PATH}" -type f -mtime +7 -delete 2>/dev/null || true
+                '''
+            }
+        }
+        
+        success {
+            echo 'Build completed successfully!'
+        }
+        
+        failure {
+            echo 'Build failed!'
+            
+            // Archive failure logs
+            archiveArtifacts artifacts: '**/*.log', allowEmptyArchive: true
+        }
+        
+        cleanup {
+            // Release cache volume when job is done
+            script {
+                try {
+                    sh '/opt/manage-cache-volume.sh release'
+                } catch (Exception e) {
+                    echo "Cache volume release failed: ${e.message}"
+                }
+            }
+        }
+    }
+}

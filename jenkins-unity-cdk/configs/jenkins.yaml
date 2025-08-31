@@ -1,0 +1,165 @@
+# Jenkins Configuration as Code (JCasC) for Unity CI/CD
+jenkins:
+  systemMessage: "Unity CI/CD Jenkins Master - Managed by AWS CDK"
+  numExecutors: 2
+  mode: NORMAL
+  scmCheckoutRetryCount: 3
+  
+  # Global security configuration
+  remotingSecurity:
+    enabled: true
+  
+  # Agent protocols
+  agentProtocols:
+    - "JNLP4-connect"
+    - "Ping"
+  
+  # Cloud configuration for EC2 agents
+  clouds:
+    - amazonEC2:
+        name: "unity-agents-cloud"
+        region: "us-east-1"
+        useInstanceProfileForCredentials: true
+        sshKeysCredentialsId: ""
+        
+        templates:
+          - ami: "ami-xxxxxxxxx"  # Will be replaced by actual Unity Agent AMI
+            description: "Unity Build Agent"
+            instanceType: "c5.2xlarge"
+            securityGroups: "unity-cicd-jenkins-agent-sg"
+            subnetId: ""  # Will use private subnets
+            type: SpotInstanceType
+            spotConfig:
+              spotMaxBidPrice: "0.20"
+              fallbackToOndemand: true
+            
+            labelString: "unity linux"
+            mode: EXCLUSIVE
+            numExecutors: 1
+            remoteFS: "/home/ec2-user/jenkins"
+            
+            # User data for agent initialization
+            userData: |
+              #!/bin/bash
+              # Allocate and mount cache volume
+              /opt/manage-cache-volume.sh allocate
+              
+              # Activate Unity license
+              /opt/activate-unity-license.sh
+              
+              # Setup Jenkins agent
+              mkdir -p /home/ec2-user/jenkins
+              chown ec2-user:ec2-user /home/ec2-user/jenkins
+
+# Security configuration
+security:
+  globalJobDslSecurityConfiguration:
+    useScriptSecurity: false
+  
+  # CSRF protection
+  crumbIssuer:
+    standard:
+      excludeClientIPFromCrumb: false
+
+# Tool configuration
+tool:
+  # Unity installations
+  unity3d:
+    installations:
+      - name: "Unity 2023.2.20f1"
+        home: "/opt/unity/Editor"
+        
+  # JDK installations  
+  jdk:
+    installations:
+      - name: "Amazon Corretto 17"
+        home: "/usr/lib/jvm/java-17-amazon-corretto"
+        
+  # Android SDK
+  androidSDK:
+    installations:
+      - name: "Android SDK"
+        home: "/opt/android-sdk"
+
+# Global pipeline libraries
+unclassified:
+  location:
+    adminAddress: "admin@company.com"
+    url: "https://jenkins.company.com/"
+    
+  # Global pipeline shared libraries
+  globalLibraries:
+    libraries:
+      - name: "unity-pipeline-library"
+        defaultVersion: "main"
+        retriever:
+          modernSCM:
+            scm:
+              git:
+                remote: "https://github.com/company/unity-pipeline-library.git"
+                
+  # Slack notifications (optional)
+  slackNotifier:
+    teamDomain: ""
+    token: ""
+    
+  # Email configuration
+  mailer:
+    smtpHost: "localhost"
+    smtpPort: 25
+    
+  # Build discarders
+  buildDiscarders:
+    configuredBuildDiscarders:
+      - "logRotator":
+          artifactDaysToKeepStr: "30"
+          artifactNumToKeepStr: "10"
+          daysToKeepStr: "30"
+          numToKeepStr: "50"
+
+# Job configuration
+jobs:
+  - script: |
+      folder('Unity Projects') {
+        description('Folder for Unity game projects')
+      }
+      
+      multibranchPipelineJob('Unity Projects/Unity Game Build') {
+        branchSources {
+          git {
+            id('unity-game-repo')
+            remote('https://github.com/company/unity-game.git')
+            credentialsId('github-credentials')
+          }
+        }
+        
+        factory {
+          workflowBranchProjectFactory {
+            scriptPath('Jenkinsfile')
+          }
+        }
+        
+        configure { node ->
+          node / 'sources' / 'data' / 'jenkins.branch.BranchSource' / 'source' / 'traits' << 'jenkins.plugins.git.traits.BranchDiscoveryTrait' {
+            strategyId(1)
+          }
+        }
+      }
+
+# Credentials (will be configured separately)
+credentials:
+  system:
+    domainCredentials:
+      - credentials:
+          - usernamePassword:
+              scope: GLOBAL
+              id: "unity-license"
+              username: "${UNITY_USERNAME}"
+              password: "${UNITY_PASSWORD}"
+              description: "Unity License Credentials"
+              
+          - string:
+              scope: GLOBAL
+              id: "unity-serial"
+              secret: "${UNITY_SERIAL}"
+              description: "Unity Serial Number"

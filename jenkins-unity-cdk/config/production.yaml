@@ -1,7 +1,8 @@
 # Production configuration for Jenkins Unity CI/CD
-project_prefix: "prod-unity-cicd"
+project_prefix: "unity-cicd-prod"
 aws_region: "us-east-1"
 unity_version: "2023.2.20f1"
+environment: "production"
 
 # Network Configuration
 vpc:
@@ -10,36 +11,41 @@ vpc:
   
 # Jenkins Master Configuration
 jenkins_master:
-  instance_type: "c5.xlarge"
-  volume_size: 50
+  instance_type: "c5.xlarge"  # Larger instance for production
+  volume_size: 50  # More storage for production
   
 # Jenkins Agent Configuration
 jenkins_agents:
   instance_types:
+    - "c5.2xlarge"
     - "c5.4xlarge"
+    - "c5.9xlarge"
+    - "m5.2xlarge"
     - "m5.4xlarge"
+    - "m5.8xlarge"
     - "r5.2xlarge"
-  max_instances: 20
-  min_instances: 0
-  desired_capacity: 3
+    - "r5.4xlarge"
+  max_instances: 50  # Higher capacity for production
+  min_instances: 2   # Keep minimum instances running
+  desired_capacity: 5
 
 # EBS Cache Pool Configuration
 cache_pool:
-  volume_size: 200
+  volume_size: 200  # Larger cache volumes for production
   volume_type: "gp3"
-  iops: 3000
-  throughput: 125
-  min_volumes_per_az: 3
-  max_age_days: 14
+  iops: 5000        # Higher IOPS for better performance
+  throughput: 250   # Higher throughput
+  min_volumes_per_az: 5  # More cache volumes per AZ
+  max_age_days: 14  # Keep cache longer in production
 
 # EFS Configuration
 efs:
   performance_mode: "generalPurpose"
   throughput_mode: "provisioned"
-  provisioned_throughput: 200
+  provisioned_throughput: 500  # Higher throughput for production
 
 # Monitoring Configuration
 monitoring:
   enable_detailed_monitoring: true
-  log_retention_days: 90
-  enable_xray: true
+  log_retention_days: 90  # Longer retention for production
+  enable_xray: true       # Enable X-Ray tracing in production
