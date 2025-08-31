@@ -1,0 +1,47 @@
+# Default configuration for Jenkins Unity CI/CD
+project_prefix: "unity-cicd"
+aws_region: "us-east-1"
+unity_version: "2023.2.20f1"
+
+# Network Configuration
+vpc:
+  cidr: "10.0.0.0/16"
+  availability_zones: 3
+  
+# Jenkins Master Configuration
+jenkins_master:
+  instance_type: "c5.large"
+  volume_size: 20
+  
+# Jenkins Agent Configuration
+jenkins_agents:
+  instance_types:
+    - "c5.2xlarge"
+    - "c5.4xlarge"
+    - "m5.2xlarge"
+    - "m5.4xlarge"
+    - "r5.2xlarge"
+  max_instances: 10
+  min_instances: 0
+  desired_capacity: 2
+
+# EBS Cache Pool Configuration
+cache_pool:
+  volume_size: 100
+  volume_type: "gp3"
+  iops: 3000
+  throughput: 125
+  min_volumes_per_az: 2
+  max_age_days: 7
+
+# EFS Configuration
+efs:
+  performance_mode: "generalPurpose"
+  throughput_mode: "provisioned"
+  provisioned_throughput: 100
+
+# Monitoring Configuration
+monitoring:
+  enable_detailed_monitoring: true
+  log_retention_days: 30
+  enable_xray: false
