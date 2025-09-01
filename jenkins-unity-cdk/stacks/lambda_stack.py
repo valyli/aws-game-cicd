@@ -6,8 +6,10 @@ from aws_cdk import (
     aws_events as events,
     aws_events_targets as targets,
     aws_ec2 as ec2,
+    aws_logs as logs,
     Duration,
     CfnOutput,
+    RemovalPolicy,
 )
 from constructs import Construct
 from typing import Dict, Any
@@ -36,6 +38,14 @@ class LambdaStack(Stack):
     def _create_allocate_cache_volume_function(self):
         """Create Lambda function to allocate cache volumes."""
         
+        # Create log group with explicit removal policy
+        allocate_log_group = logs.LogGroup(
+            self, "AllocateCacheVolumeLogGroup",
+            log_group_name=f"/aws/lambda/{self.config['resource_namer']('allocate-cache-volume')}",
+            removal_policy=RemovalPolicy.DESTROY,
+            retention=logs.RetentionDays.ONE_WEEK,
+        )
+        
         self.allocate_cache_volume_function = _lambda.Function(
             self, "AllocateCacheVolumeFunction",
             function_name=self.config["resource_namer"]("allocate-cache-volume"),
@@ -50,6 +60,7 @@ class LambdaStack(Stack):
                 subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
             ),
             security_groups=[self.vpc_stack.lambda_sg],
+            log_group=allocate_log_group,
             environment={
                 "CACHE_POOL_TABLE": self.storage_stack.cache_pool_table.table_name,
                 "VOLUME_SIZE": str(self.config["cache_pool"]["volume_size"]),
@@ -62,6 +73,14 @@ class LambdaStack(Stack):
 
     def _create_release_cache_volume_function(self):
         """Create Lambda function to release cache volumes."""
+        
+        # Create log group with explicit removal policy
+        release_log_group = logs.LogGroup(
+            self, "ReleaseCacheVolumeLogGroup",
+            log_group_name=f"/aws/lambda/{self.config['resource_namer']('release-cache-volume')}",
+            removal_policy=RemovalPolicy.DESTROY,
+            retention=logs.RetentionDays.ONE_WEEK,
+        )
         
         self.release_cache_volume_function = _lambda.Function(
             self, "ReleaseCacheVolumeFunction",
@@ -77,6 +96,7 @@ class LambdaStack(Stack):
                 subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
             ),
             security_groups=[self.vpc_stack.lambda_sg],
+            log_group=release_log_group,
             environment={
                 "CACHE_POOL_TABLE": self.storage_stack.cache_pool_table.table_name,
             },
@@ -85,6 +105,14 @@ class LambdaStack(Stack):
 
     def _create_maintain_cache_pool_function(self):
         """Create Lambda function to maintain cache pool."""
+        
+        # Create log group with explicit removal policy
+        maintain_log_group = logs.LogGroup(
+            self, "MaintainCachePoolLogGroup",
+            log_group_name=f"/aws/lambda/{self.config['resource_namer']('maintain-cache-pool')}",
+            removal_policy=RemovalPolicy.DESTROY,
+            retention=logs.RetentionDays.ONE_WEEK,
+        )
         
         self.maintain_cache_pool_function = _lambda.Function(
             self, "MaintainCachePoolFunction",
@@ -100,6 +128,7 @@ class LambdaStack(Stack):
                 subnet_type=ec2.SubnetType.PRIVATE_WITH_EGRESS
             ),
             security_groups=[self.vpc_stack.lambda_sg],
+            log_group=maintain_log_group,
             environment={
                 "CACHE_POOL_TABLE": self.storage_stack.cache_pool_table.table_name,
                 "MAX_AGE_DAYS": str(self.config["cache_pool"]["max_age_days"]),

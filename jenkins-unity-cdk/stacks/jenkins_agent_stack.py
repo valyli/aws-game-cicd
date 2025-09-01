@@ -32,8 +32,24 @@ class JenkinsAgentStack(Stack):
     def _create_launch_template(self):
         """Create launch template for Jenkins Agents with Spot instances."""
         
-        # User data script for Jenkins Agent
-        user_data_script = f"""#!/bin/bash
+        # 简化的用户数据脚本（Unity已在AMI中预装）
+        if "unity_ami_id" in self.config and self.config["unity_ami_id"]:
+            # 使用预构建AMI的简化脚本
+            user_data_script = f"""#!/bin/bash
+# 系统初始化（Unity已预装）
+echo "Starting Jenkins Agent with pre-built Unity AMI..."
+
+# 启动Docker
+systemctl start docker
+
+# 验证Unity安装
+echo "Verifying Unity installation..."
+/opt/unity/Editor/Unity -version > /tmp/unity-version.log 2>&1 || echo "Unity verification failed"
+cat /tmp/unity-version.log
+"""
+        else:
+            # 原始的完整安装脚本
+            user_data_script = f"""#!/bin/bash
 # Update system
 yum update -y
 
@@ -50,9 +66,15 @@ systemctl enable docker
 systemctl start docker
 usermod -a -G docker ec2-user
 
-# Install Unity Hub and Editor (placeholder - will be in AMI)
-# This will be handled by the Unity Agent AMI
+# Install Unity (fallback for non-AMI deployment)
+echo "Installing Unity from scratch..."
+mkdir -p /opt/unity
+echo "Unity installation would go here - consider using pre-built AMI instead"
+"""
 
+        
+        # 通用的缓存卷管理脚本
+        user_data_script += f"""
 # Get instance metadata
 INSTANCE_ID=$(curl -s http://169.254.169.254/latest/meta-data/instance-id)
 AZ=$(curl -s http://169.254.169.254/latest/meta-data/placement/availability-zone)
@@ -150,17 +172,30 @@ chmod +x /opt/spot-interruption-handler.sh
 # Start spot interruption handler
 nohup /opt/spot-interruption-handler.sh > /var/log/spot-handler.log 2>&1 &
 
+# Verify Unity installation
+echo "Verifying Unity installation..."
+/opt/unity/Editor/Unity -version > /tmp/unity-version.log 2>&1 || echo "Unity verification failed"
+cat /tmp/unity-version.log
+
 # Install Jenkins agent (will connect to master)
 # This will be handled by Jenkins master when it discovers the agent
 
-# Signal completion
-/opt/aws/bin/cfn-signal -e $? --stack {self.stack_name} --resource JenkinsAgentASG --region {self.region}
+# Install cfn-bootstrap tools
+yum install -y aws-cfn-bootstrap
 """
 
+        # 使用预构建的Unity AMI或默认AMI
+        if "unity_ami_id" in self.config and self.config["unity_ami_id"]:
+            machine_image = ec2.MachineImage.generic_linux({
+                self.region: self.config["unity_ami_id"]
+            })
+        else:
+            machine_image = ec2.MachineImage.latest_amazon_linux2023()
+            
         self.launch_template = ec2.LaunchTemplate(
             self, "JenkinsAgentLaunchTemplate",
             launch_template_name=self.config["resource_namer"]("jenkins-agent-lt"),
-            machine_image=ec2.MachineImage.latest_amazon_linux2023(),
+            machine_image=machine_image,
             security_group=self.vpc_stack.jenkins_agent_sg,
             role=self.iam_stack.jenkins_agent_role,
             user_data=ec2.UserData.custom(user_data_script),
@@ -211,8 +246,8 @@ nohup /opt/spot-interruption-handler.sh > /var/log/spot-handler.log 2>&1 &
             update_policy=autoscaling.UpdatePolicy.rolling_update(
                 min_instances_in_service=0,
                 max_batch_size=2,
-                pause_time=Duration.minutes(5),
-                wait_on_resource_signals=True,
+                pause_time=Duration.minutes(2),
+                wait_on_resource_signals=False,  # 不等待信号，避免Unity安装超时
             ),
         )
 

@@ -3,6 +3,18 @@ project_prefix: "unity-cicd"
 aws_region: "us-east-1"
 unity_version: "2023.2.20f1"
 
+# Security Configuration
+# 限制允许访问Jenkins的IP地址范围
+allowed_cidrs:
+  - "54.0.0.0/8"  # 当前IP
+  - "15.0.0.0/8"  # 当前IP
+  - "10.0.0.0/8"      # 内网IP
+  - "172.16.0.0/12"   # 内网IP
+  - "192.168.0.0/16"  # 内网IP
+  # 添加您的公网IP范围，例如：
+  # - "203.0.113.0/24"  # 您的公司IP范围
+  # - "198.51.100.0/24" # 您的家庭IP范围
+
 # Network Configuration
 vpc:
   cidr: "10.0.0.0/16"

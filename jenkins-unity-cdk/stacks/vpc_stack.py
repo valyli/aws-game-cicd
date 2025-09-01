@@ -130,11 +130,11 @@ class VpcStack(Stack):
         """Configure security group ingress and egress rules."""
         
         # Jenkins Master Security Group Rules
-        # SSH access from anywhere (as per design decision)
+        # SSH access only from VPC (use SSM for remote access)
         self.jenkins_master_sg.add_ingress_rule(
-            peer=ec2.Peer.any_ipv4(),
+            peer=ec2.Peer.ipv4(self.config["vpc"]["cidr"]),
             connection=ec2.Port.tcp(22),
-            description="SSH access"
+            description="SSH from VPC only"
         )
         
         # HTTP from ALB (using CIDR instead of SG reference)
@@ -159,20 +159,31 @@ class VpcStack(Stack):
             description="SSH from VPC"
         )
         
-        # ALB Security Group Rules
-        # HTTP from anywhere
-        self.alb_sg.add_ingress_rule(
-            peer=ec2.Peer.any_ipv4(),
-            connection=ec2.Port.tcp(80),
-            description="HTTP from anywhere"
-        )
+        # ALB Security Group Rules - 限制IP地址范围
+        allowed_cidrs = self.config.get("allowed_cidrs", ["10.0.0.0/8"])
         
-        # HTTPS from anywhere
-        self.alb_sg.add_ingress_rule(
-            peer=ec2.Peer.any_ipv4(),
-            connection=ec2.Port.tcp(443),
-            description="HTTPS from anywhere"
-        )
+        # 为每个CIDR添加规则
+        for cidr in allowed_cidrs:
+            # HTTP from allowed IPs
+            self.alb_sg.add_ingress_rule(
+                peer=ec2.Peer.ipv4(cidr),
+                connection=ec2.Port.tcp(80),
+                description=f"HTTP from {cidr}"
+            )
+            
+            # HTTPS from allowed IPs  
+            self.alb_sg.add_ingress_rule(
+                peer=ec2.Peer.ipv4(cidr),
+                connection=ec2.Port.tcp(443),
+                description=f"HTTPS from {cidr}"
+            )
+            
+            # Jenkins 8080 from allowed IPs
+            self.alb_sg.add_ingress_rule(
+                peer=ec2.Peer.ipv4(cidr),
+                connection=ec2.Port.tcp(8080),
+                description=f"Jenkins 8080 from {cidr}"
+            )
         
         # EFS Security Group Rules
         # NFS from VPC

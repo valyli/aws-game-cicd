@@ -90,7 +90,7 @@ build {
   provisioner "shell" {
     inline = [
       "sudo yum update -y",
-      "sudo yum install -y wget curl unzip git xorg-x11-server-Xvfb",
+      "sudo yum install -y wget unzip git xorg-x11-server-Xvfb --allowerasing",
       "sudo yum groupinstall -y 'Development Tools'"
     ]
   }
@@ -122,12 +122,14 @@ build {
     ]
   }
 
-  # Install Unity Hub
+  # Install Unity Hub (AppImage)
   provisioner "shell" {
     inline = [
-      "wget -qO - https://hub.unity3d.com/linux/keys/public | gpg --dearmor | sudo tee /usr/share/keyrings/Unity_Technologies_ApS.gpg > /dev/null",
-      "echo 'deb [signed-by=/usr/share/keyrings/Unity_Technologies_ApS.gpg] https://hub.unity3d.com/linux/repos/deb stable main' | sudo tee /etc/apt/sources.list.d/unityhub.list",
-      "sudo yum install -y unityhub || echo 'Unity Hub installation may require manual setup'"
+      "# Download Unity Hub AppImage",
+      "sudo mkdir -p /opt/unity",
+      "wget -q https://public-cdn.cloud.unity3d.com/hub/prod/UnityHub.AppImage -O /opt/unity/UnityHub.AppImage",
+      "sudo chmod +x /opt/unity/UnityHub.AppImage",
+      "sudo chown root:root /opt/unity/UnityHub.AppImage"
     ]
   }
 

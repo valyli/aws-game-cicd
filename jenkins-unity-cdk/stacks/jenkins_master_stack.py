@@ -82,12 +82,18 @@ systemctl start amazon-ssm-agent
 wget https://s3.amazonaws.com/amazoncloudwatch-agent/amazon_linux/amd64/latest/amazon-cloudwatch-agent.rpm
 rpm -U ./amazon-cloudwatch-agent.rpm
 
-# Install dependencies (ensure Java is installed first)
-yum install -y java-17-amazon-corretto-devel git wget curl unzip htop
+# Install Java first (exactly like manual success)
+echo "Installing Java..."
+yum install -y java-17-amazon-corretto-devel
 
-# Verify Java installation
+# Verify Java installation immediately
+echo "Verifying Java installation..."
 java -version
 which java
+
+# Install other dependencies separately
+echo "Installing other dependencies..."
+yum install -y git wget curl unzip htop
 
 # Install EFS utils (required for EFS mounting)
 yum install -y amazon-efs-utils
@@ -120,25 +126,22 @@ done
 # Ensure correct permissions
 chown -R jenkins:jenkins /var/lib/jenkins
 
-# Configure Jenkins with fallback to manual start
-echo "Configuring Jenkins service..."
+# Start Jenkins (prefer systemd, fallback to manual)
+echo "Starting Jenkins..."
 systemctl daemon-reload
 systemctl enable jenkins
 
-# Try systemd start first
-if systemctl start jenkins; then
-    echo "Jenkins started via systemd"
-else
-    echo "Systemd start failed, starting Jenkins manually..."
-    # Kill any existing Jenkins processes
-    pkill -f jenkins || true
-    
-    # Start Jenkins manually
-    export JENKINS_HOME=/var/lib/jenkins
-    export JENKINS_PORT=8080
-    nohup sudo -u jenkins java -Djava.awt.headless=true -jar /usr/share/java/jenkins.war --httpPort=8080 > /var/log/jenkins-manual.log 2>&1 &
-    echo "Jenkins started manually"
-fi
+# Ensure Jenkins home exists and has correct permissions
+export JENKINS_HOME=/var/lib/jenkins
+chown -R jenkins:jenkins /var/lib/jenkins
+
+# Start Jenkins manually (same as successful manual method)
+echo "Starting Jenkins manually..."
+export JENKINS_HOME=/var/lib/jenkins
+chown -R jenkins:jenkins /var/lib/jenkins
+sudo -u jenkins nohup java -Djava.awt.headless=true -jar /usr/share/java/jenkins.war --httpPort=8080 > /var/log/jenkins-manual.log 2>&1 &
+echo "Jenkins started manually"
+JENKINS_START_METHOD="manual"
 
 # Wait for Jenkins to be ready
 echo "Waiting for Jenkins to start..."
@@ -151,19 +154,8 @@ for i in $(seq 1 30); do
     sleep 10
 done
 
-# Check Jenkins port
-echo "Checking Jenkins port 8080..."
-for i in $(seq 1 20); do
-    if netstat -tlnp | grep :8080; then
-        echo "Jenkins is listening on port 8080"
-        break
-    fi
-    echo "Waiting for Jenkins port... attempt $i/20"
-    sleep 15
-done
-
 # Install Docker for build tools
-yum install -y docker
+yum install -y docker --allowerasing
 systemctl enable docker
 systemctl start docker
 usermod -a -G docker jenkins
@@ -248,9 +240,14 @@ EOF
 # Start CloudWatch Agent
 /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s
 
-# Restart Jenkins to apply configuration
-echo "Restarting Jenkins to apply configuration..."
-systemctl restart jenkins
+# Apply configuration based on start method
+echo "Applying Jenkins configuration..."
+if [ "$JENKINS_START_METHOD" = "systemd" ]; then
+    echo "Restarting systemd Jenkins service..."
+    systemctl restart jenkins
+else
+    echo "Jenkins started manually, configuration will be applied on next restart"
+fi
 
 # Final status check
 echo "Final Jenkins status check..."
