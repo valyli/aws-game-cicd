@@ -3,6 +3,7 @@
 from aws_cdk import (
     Stack,
     aws_efs as efs,
+    aws_ec2 as ec2,
     aws_dynamodb as dynamodb,
     aws_s3 as s3,
     RemovalPolicy,
@@ -45,6 +46,10 @@ class StorageStack(Stack):
             encrypted=True,
             removal_policy=RemovalPolicy.DESTROY,  # For development
             security_group=self.vpc_stack.efs_sg,
+            # Create mount targets in public subnets for Jenkins Master access
+            vpc_subnets=ec2.SubnetSelection(
+                subnet_type=ec2.SubnetType.PUBLIC
+            ),
         )
 
         # Output EFS ID

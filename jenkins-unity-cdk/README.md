@@ -33,101 +33,17 @@
 
 ## 快速开始
 
-### 前置要求
-
-1. **AWS CLI**: 已配置有效的AWS凭证
-2. **AWS CDK**: 版本 2.x
-3. **Python 3.8+**: 用于CDK应用
-4. **Packer** (可选): 用于构建自定义AMI
+📋 **详细部署说明请参考**: [部署指南 (DEPLOYMENT.md)](./DEPLOYMENT.md)
 
 ### 一键部署
 
 ```bash
-# 克隆项目
 git clone <repository-url>
 cd jenkins-unity-cdk
-
-# 创建虚拟环境
 python3 -m venv .venv
 source .venv/bin/activate
-
-# 安装依赖
 pip install -r requirements.txt
-
-# 完整部署
 ./scripts/deploy-complete.sh
-```
-
-### 分阶段部署
-
-如果需要分阶段部署，可以使用以下命令：
-
-```bash
-# 1. 部署基础设施
-cdk deploy unity-cicd-vpc-stack unity-cicd-storage-stack unity-cicd-iam-stack
-
-# 2. 部署Lambda函数
-cdk deploy unity-cicd-lambda-stack
-
-# 3. 部署Jenkins Master
-cdk deploy unity-cicd-jenkins-master-stack
-
-# 4. 部署Jenkins Agents
-cdk deploy unity-cicd-jenkins-agent-stack
-
-# 5. 部署监控
-cdk deploy unity-cicd-monitoring-stack
-```
-
-## 配置说明
-
-### 环境配置
-
-主要配置文件位于 `config/` 目录：
-
-- `default.yaml`: 默认配置
-- `production.yaml`: 生产环境配置
-
-可以通过环境变量或CDK上下文覆盖配置：
-
-```bash
-export PROJECT_PREFIX="my-unity-cicd"
-export AWS_REGION="us-west-2"
-export UNITY_VERSION="2023.3.0f1"
-
-# 或使用CDK上下文
-cdk deploy -c project_prefix="my-unity-cicd" -c aws_region="us-west-2"
-```
-
-### Unity许可证配置
-
-部署完成后，需要在AWS Systems Manager Parameter Store中配置Unity许可证：
-
-```bash
-# 配置Unity许可证信息
-aws ssm put-parameter --name "/jenkins/unity/username" --value "your-unity-username" --type "SecureString"
-aws ssm put-parameter --name "/jenkins/unity/password" --value "your-unity-password" --type "SecureString"
-aws ssm put-parameter --name "/jenkins/unity/serial" --value "your-unity-serial" --type "SecureString"
-```
-
-## AMI构建
-
-### 自动构建AMI
-
-```bash
-# 构建Jenkins Master和Unity Agent AMI
-./scripts/build-amis.sh
-```
-
-### 手动构建
-
-```bash
-# 构建Jenkins Master AMI
-cd packer
-packer build jenkins-master.pkr.hcl
-
-# 构建Unity Agent AMI
-packer build unity-agent.pkr.hcl
 ```
 
 ## 使用指南
@@ -144,9 +60,22 @@ aws cloudformation describe-stacks \
   --output text
 ```
 
-默认登录凭证：
-- 用户名: `admin`
-- 密码: `admin123`
+### Jenkins初始设置
+
+**获取初始管理员密码**
+```bash
+cd jenkins-unity-cdk
+./get-jenkins-password.sh
+```
+
+**初始化向导注意事项**
+
+如果在插件安装步骤遇到"An error occurred: Forbidden"错误：
+1. 选择"Select plugins to install"
+2. 点击"None"跳过插件安装
+3. 完成初始设置后再手动安装需要的插件
+
+> 💡 这个错误是由于CSRF保护机制导致的，通常发生在页面停留时间过长时。跳过插件安装是最简单的解决方案。
 
 ### Unity项目配置
 
@@ -218,17 +147,22 @@ aws sns subscribe \
 
 ### 常见问题
 
-1. **Jenkins无法访问**
+1. **Jenkins初始化插件安装失败**
+   - 错误："An error occurred: Forbidden"
+   - 原因：CSRF保护机制阻止请求
+   - 解决：跳过插件安装，完成设置后手动安装
+
+2. **Jenkins无法访问**
    - 检查ALB健康检查状态
    - 确认安全组配置正确
    - 查看EC2实例日志
 
-2. **Unity构建失败**
+3. **Unity构建失败**
    - 检查Unity许可证配置
    - 确认AMI包含正确的Unity版本
    - 查看构建日志
 
-3. **Spot实例频繁中断**
+4. **Spot实例频繁中断**
    - 调整实例类型组合
    - 增加按需实例比例
    - 检查区域Spot价格历史

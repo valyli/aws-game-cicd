@@ -118,8 +118,19 @@ class IamStack(Stack):
                 ],
                 resources=[
                     f"arn:aws:logs:{self.region}:{self.account}:log-group:/aws/jenkins/*",
+                    f"arn:aws:logs:{self.region}:{self.account}:log-group:/aws/ec2/jenkins/*",
                 ],
             )
+        )
+        
+        # SSM permissions for Session Manager
+        self.jenkins_master_role.add_managed_policy(
+            iam.ManagedPolicy.from_aws_managed_policy_name("AmazonSSMManagedInstanceCore")
+        )
+        
+        # CloudWatch Agent permissions
+        self.jenkins_master_role.add_managed_policy(
+            iam.ManagedPolicy.from_aws_managed_policy_name("CloudWatchAgentServerPolicy")
         )
         
         # IAM permissions for managing agent instances
