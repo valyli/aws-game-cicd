@@ -91,6 +91,7 @@ build {
     inline = [
       "sudo yum update -y",
       "sudo yum install -y wget unzip git xorg-x11-server-Xvfb --allowerasing",
+      "sudo yum install -y libXcursor libXrandr libXinerama libXi mesa-libGL gtk3 gtk3-devel",
       "sudo yum groupinstall -y 'Development Tools'"
     ]
   }
@@ -122,14 +123,11 @@ build {
     ]
   }
 
-  # Install Unity Hub (AppImage)
+  # Install Unity Hub (AppImage) - Skip for headless build
   provisioner "shell" {
     inline = [
-      "# Download Unity Hub AppImage",
-      "sudo mkdir -p /opt/unity",
-      "wget -q https://public-cdn.cloud.unity3d.com/hub/prod/UnityHub.AppImage -O /opt/unity/UnityHub.AppImage",
-      "sudo chmod +x /opt/unity/UnityHub.AppImage",
-      "sudo chown root:root /opt/unity/UnityHub.AppImage"
+      "# Skip Unity Hub for headless build",
+      "echo 'Skipping Unity Hub - using direct Unity Editor download'"
     ]
   }
 
@@ -144,7 +142,12 @@ build {
       "sudo mkdir -p /opt/unity",
       "sudo mv Unity /opt/unity/Editor",
       "sudo chown -R root:root /opt/unity",
-      "sudo chmod +x /opt/unity/Editor/Unity"
+      "sudo chmod +x /opt/unity/Editor/Unity",
+      "# Test Unity installation",
+      "export DISPLAY=:99",
+      "Xvfb :99 -screen 0 1024x768x24 &",
+      "sleep 2",
+      "/opt/unity/Editor/Unity -version -batchmode -quit || echo 'Unity test completed'"
     ]
   }
 

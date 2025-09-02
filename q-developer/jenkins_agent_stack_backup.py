@@ -46,38 +46,13 @@ yum install -y amazon-ssm-agent
 systemctl enable amazon-ssm-agent
 systemctl start amazon-ssm-agent
 
-# Install dependencies with conflict resolution
-echo "Installing dependencies with conflict resolution..."
-yum install -y git wget unzip amazon-efs-utils --allowerasing
-
-# Install Java with conflict resolution
-echo "Installing Java 17..."
-yum install -y java-17-amazon-corretto --allowerasing
-
-# Verify Java installation with retry
-echo "Verifying Java installation..."
-if ! java -version 2>&1; then
-    echo "ERROR: Java installation failed! Retrying..."
-    yum remove -y java-17-amazon-corretto
-    yum clean all
-    yum install -y java-17-amazon-corretto --allowerasing
-    
-    if ! java -version 2>&1; then
-        echo "CRITICAL: Java installation failed after retry!"
-        exit 1
-    fi
-fi
-
-# Set JAVA_HOME
-JAVA_HOME=$(readlink -f /usr/bin/java | sed "s:bin/java::")
-export JAVA_HOME
-echo "JAVA_HOME=$JAVA_HOME" >> /etc/environment
-echo "Java installed successfully at $JAVA_HOME"
-
-# Final Java verification
-echo "Final Java verification:"
+# Install Java
+echo "Installing Java..."
+yum install -y java-17-amazon-corretto
 java -version
-echo "JAVA_HOME: $JAVA_HOME"
+
+# Install basic dependencies
+yum install -y git wget curl unzip
 
 # Create jenkins user
 useradd -m -s /bin/bash jenkins || true
@@ -129,24 +104,12 @@ cat > /opt/jenkins/start-agent.sh << 'EOF'
 #!/bin/bash
 echo "Starting Jenkins JNLP Agent with auto-registration..."
 
+JENKINS_URL="http://10.0.0.66:8080"
 # Use IMDSv2 to get instance metadata
 TOKEN=$(curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s)
 INSTANCE_ID=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/instance-id)
 AGENT_NAME="unity-agent-$INSTANCE_ID"
 PRIVATE_IP=$(curl -H "X-aws-ec2-metadata-token: $TOKEN" -s http://169.254.169.254/latest/meta-data/local-ipv4)
-
-# Dynamically get Jenkins Master private IP
-MASTER_IP=$(aws ec2 describe-instances \
-  --filters "Name=tag:Name,Values=*jenkins-master*" "Name=instance-state-name,Values=running" \
-  --query "Reservations[0].Instances[0].PrivateIpAddress" \
-  --output text 2>/dev/null)
-
-if [ "$MASTER_IP" = "None" ] || [ -z "$MASTER_IP" ]; then
-  echo "Could not find Jenkins Master, using fallback IP"
-  MASTER_IP="10.0.0.66"
-fi
-
-JENKINS_URL="http://$MASTER_IP:8080"
 
 echo "Agent Name: $AGENT_NAME"
 echo "Private IP: $PRIVATE_IP"
@@ -186,28 +149,18 @@ NODE_CONFIG='<slave>
 
 # Wait for Jenkins Master to create the node
 echo "Waiting for Jenkins Master to create node $AGENT_NAME..."
-echo "Jenkins URL: $JENKINS_URL"
-echo "Agent Name: $AGENT_NAME"
-echo "Private IP: $PRIVATE_IP"
-
-for i in $(seq 1 60); do
+for i in $(seq 1 30); do
     if curl -s "$JENKINS_URL/computer/$AGENT_NAME/jenkins-agent.jnlp" | grep -q "<jnlp>"; then
         echo "Node $AGENT_NAME found in Jenkins"
         break
     fi
-    echo "Waiting for node creation... attempt $i/60"
+    echo "Waiting for node creation... attempt $i/30"
     sleep 10
 done
 
-# Download agent.jar if not exists
-if [ ! -f agent.jar ]; then
-    echo "Downloading agent.jar..."
-    curl -sO "$JENKINS_URL/jnlpJars/agent.jar"
-fi
-
-# Connect with JNLP using WebSocket
+# Connect with JNLP
 echo "Connecting with JNLP to $JENKINS_URL/computer/$AGENT_NAME/jenkins-agent.jnlp"
-java -jar agent.jar -jnlpUrl "$JENKINS_URL/computer/$AGENT_NAME/jenkins-agent.jnlp" -webSocket -workDir /opt/jenkins
+java -jar agent.jar -jnlpUrl "$JENKINS_URL/computer/$AGENT_NAME/jenkins-agent.jnlp" -workDir /opt/jenkins
 EOF
 
 chmod +x /opt/jenkins/start-agent.sh

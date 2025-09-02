@@ -441,8 +441,8 @@ echo "Setup completed successfully" > /tmp/setup-complete
             ),
         )
         
-        # Create HTTP listener for Jenkins on port 8080
-        self.jenkins_http_listener = self.jenkins_alb.add_listener(
+        # Create HTTP listener for Jenkins
+        self.jenkins_alb.add_listener(
             "JenkinsHTTPListener",
             port=8080,
             protocol=elbv2.ApplicationProtocol.HTTP,

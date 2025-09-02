@@ -1,13 +1,15 @@
 # Default configuration for Jenkins Unity CI/CD
 project_prefix: "unity-cicd"
 aws_region: "us-east-1"
-unity_version: "2023.2.20f1"
+unity_version: "2022.3.6f1"
+unity_ami_id: "ami-070e464f5d529d141"
 
 # Security Configuration
 # 限制允许访问Jenkins的IP地址范围
 allowed_cidrs:
   - "54.0.0.0/8"  # 当前IP
   - "15.0.0.0/8"  # 当前IP
+  - "111.0.0.0/8" # 当前IP
   - "10.0.0.0/8"      # 内网IP
   - "172.16.0.0/12"   # 内网IP
   - "192.168.0.0/16"  # 内网IP
