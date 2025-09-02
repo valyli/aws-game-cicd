@@ -261,13 +261,89 @@ done
 6. **健康检查**：ALB 健康检查路径应设置为 `/login`，接受 200,403,404 状态码
 7. **Secret 保存**：从 Jenkins 获取的 secret 是一次性的，需要在 Agent 脚本中正确使用
 
-## 自动化改进建议
+## 长期自动化改进建议
 
 1. **动态 IP 发现**：Agent 应该能自动发现 Master 的私有 IP
 2. **自动节点创建**：解决 Jenkins CSRF 和认证问题，实现自动节点创建
 3. **连接重试机制**：Agent 应该有健壮的重试和错误处理机制
 4. **监控告警**：添加 Agent 连接状态监控
 5. **节点生命周期管理**：自动清理离线节点，自动注册新节点
+6. **云原生架构迁移**：迁移到 Jenkins EC2 Plugin 动态 Agent 管理
+
+## 手动操作步骤总结
+
+### 当前部署需要的手动操作
+
+#### 1. 手动修复 ALB 8080 监听器
+**原因**：CDK 代码中有 8080 监听器配置，但部署时可能丢失
+
+```bash
+# 获取 ALB 和目标组 ARN
+ALB_ARN=$(aws elbv2 describe-load-balancers --names unity-cicd-jenkins-alb --query 'LoadBalancers[0].LoadBalancerArn' --output text)
+TG_ARN=$(aws elbv2 describe-target-groups --names unity-cicd-jenkins-tg --query 'TargetGroups[0].TargetGroupArn' --output text)
+
+# 手动创建 8080 监听器
+aws elbv2 create-listener --load-balancer-arn $ALB_ARN --protocol HTTP --port 8080 --default-actions Type=forward,TargetGroupArn=$TG_ARN
+```
+
+#### 2. 手动创建 Jenkins 节点
+**原因**：Jenkins 安全设置阻止自动节点创建
+
+**步骤**：
+- 访问：`http://unity-cicd-jenkins-alb-222129503.us-east-1.elb.amazonaws.com:8080`
+- 登录：用户名 `valyli`，密码 `111111`
+- 创建节点：
+  - Manage Jenkins → Nodes → New Node
+  - 节点名称：`unity-agent-{instance-id}` (使用实际的 instance ID)
+  - 类型：Permanent Agent
+  - 配置：Remote root directory `/opt/jenkins`，Launch method "Java Web Start"
+
+#### 3. 手动执行 Agent 连接
+**原因**：Agent 在私有子网，无法访问外部 ALB，需要使用内部 IP
+
+```bash
+# 使用从 Jenkins 获取的 secret，但修改为内部 IP
+java -jar agent.jar -url http://10.0.0.213:8080/ -secret {从Jenkins获取的secret} -name "unity-agent-{instance-id}" -webSocket -workDir "/opt/jenkins"
+```
+
+### 为什么需要手动操作？
+
+1. **ALB 监听器问题**：
+   - CDK 部署过程中 8080 监听器配置可能丢失
+   - 需要手动添加才能外部访问 Jenkins
+
+2. **自动节点创建失败**：
+   - Jenkins 安全设置阻止匿名 API 访问
+   - CSRF 保护需要认证 token
+   - 自动创建脚本无法通过认证
+
+3. **网络连接问题**：
+   - Agent 在私有子网，无法访问外部 ALB
+   - 需要使用 Master 内部 IP 连接
+
+### 自动化改进方向
+
+根据 `jenkins-cloud-native-agent-architecture.md` 文档，未来应该：
+
+1. **使用 Jenkins EC2 Plugin** 替代固定 ASG
+2. **动态创建和销毁 Agent** 实现真正的云原生
+3. **解决认证问题** 实现自动节点创建
+4. **修复 ALB 配置** 确保监听器不丢失
+
+**当前手动步骤是临时解决方案**，最终目标是实现完全自动化的云原生 Jenkins Agent 管理。
+
+### 部署检查清单
+
+每次部署后需要验证：
+
+- [ ] ALB 8080 端口监听器存在
+- [ ] Jenkins Master 可以外部访问
+- [ ] Agent 实例成功启动
+- [ ] Java 正确安装在 Agent 上
+- [ ] Agent 能获取正确的 instance ID
+- [ ] Jenkins 中手动创建对应节点
+- [ ] Agent 成功连接到 Jenkins Master
+- [ ] Agent 状态显示为 "Connected"
 
 ## 常见问题排查
 
@@ -286,3 +362,8 @@ done
 1. 检查安全组配置
 2. 检查 ALB 8080 端口监听器
 3. 检查 Master 实例状态和 Jenkins 服务状态
+
+### 手动操作失败
+1. **ALB 监听器创建失败**：检查 ALB 和目标组是否存在
+2. **Jenkins 节点创建失败**：检查用户权限和登录凭证
+3. **Agent 连接失败**：检查 secret 是否正确，网络是否通畅
