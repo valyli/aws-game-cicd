@@ -155,7 +155,7 @@ if systemctl start jenkins; then
     JENKINS_START_METHOD="systemd"
 else
     echo "Systemd failed, starting Jenkins manually..."
-    sudo -u jenkins JAVA_HOME=$JAVA_HOME nohup java -Djava.awt.headless=true -jar /usr/share/java/jenkins.war --httpPort=8080 > /var/log/jenkins-manual.log 2>&1 &
+    sudo -u jenkins JAVA_HOME=$JAVA_HOME nohup java -Dhudson.security.csrf.GlobalCrumbIssuerConfiguration.DISABLE_CSRF_PROTECTION=true -Djava.awt.headless=true -jar /usr/share/java/jenkins.war --httpPort=8080 > /var/log/jenkins-manual.log 2>&1 &
     echo "Jenkins started manually"
     JENKINS_START_METHOD="manual"
 fi
@@ -177,33 +177,35 @@ systemctl enable docker
 systemctl start docker
 usermod -a -G docker jenkins
 
-# Create Jenkins initial configuration
-mkdir -p /var/lib/jenkins/init.groovy.d
+# Create Jenkins configuration (无安全模式)
+mkdir -p /var/lib/jenkins
 
-# Basic security configuration
-cat > /var/lib/jenkins/init.groovy.d/basic-security.groovy << 'EOF'
-#!groovy
-import jenkins.model.*
-import hudson.security.*
-import jenkins.security.s2m.AdminWhitelistRule
-
-def instance = Jenkins.getInstance()
-
-// Create admin user
-def hudsonRealm = new HudsonPrivateSecurityRealm(false)
-hudsonRealm.createAccount("admin", "admin123")
-instance.setSecurityRealm(hudsonRealm)
-
-// Set authorization strategy
-def strategy = new FullControlOnceLoggedInAuthorizationStrategy()
-strategy.setAllowAnonymousRead(false)
-instance.setAuthorizationStrategy(strategy)
-
-// Disable remoting
-instance.getDescriptor("jenkins.CLI").get().setEnabled(false)
-
-// Save configuration
-instance.save()
+# 创建无安全模式的config.xml
+cat > /var/lib/jenkins/config.xml << 'EOF'
+<?xml version="1.0" encoding="UTF-8"?>
+<hudson>
+  <version>2.516.2</version>
+  <numExecutors>2</numExecutors>
+  <mode>NORMAL</mode>
+  <useSecurity>false</useSecurity>
+  <authorizationStrategy class="hudson.security.AuthorizationStrategy$Unsecured"/>
+  <securityRealm class="hudson.security.SecurityRealm$None"/>
+  <disableRememberMe>false</disableRememberMe>
+  <workspaceDir>${{JENKINS_HOME}}/workspace/${{ITEM_FULLNAME}}</workspaceDir>
+  <buildsDir>${{ITEM_ROOTDIR}}/builds</buildsDir>
+  <jdks/>
+  <views>
+    <hudson.model.AllView>
+      <owner class="hudson" reference="../../.."/>
+      <name>all</name>
+      <filterExecutors>false</filterExecutors>
+      <filterQueue>false</filterQueue>
+    </hudson.model.AllView>
+  </views>
+  <primaryView>all</primaryView>
+  <slaveAgentPort>-1</slaveAgentPort>
+  <clouds/>
+</hudson>
 EOF
 
 # Configure Jenkins for Unity builds
@@ -257,17 +259,9 @@ EOF
 # Start CloudWatch Agent
 /opt/aws/amazon-cloudwatch-agent/bin/amazon-cloudwatch-agent-ctl -a fetch-config -m ec2 -c file:/opt/aws/amazon-cloudwatch-agent/etc/amazon-cloudwatch-agent.json -s
 
-# Apply configuration based on start method
-echo "Applying Jenkins configuration..."
-chown -R jenkins:jenkins /var/lib/jenkins
-
-if [ "$JENKINS_START_METHOD" = "systemd" ]; then
-    echo "Restarting systemd Jenkins service..."
-    systemctl restart jenkins
-    sleep 10
-else
-    echo "Jenkins started manually, configuration applied"
-fi
+# 确保配置文件权限正确
+chown jenkins:jenkins /var/lib/jenkins/config.xml
+echo "Jenkins configured for no-security mode"
 
 # Final status check
 echo "Final Jenkins status check..."
