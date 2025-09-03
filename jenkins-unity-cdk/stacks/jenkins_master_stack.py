@@ -155,7 +155,7 @@ if systemctl start jenkins; then
     JENKINS_START_METHOD="systemd"
 else
     echo "Systemd failed, starting Jenkins manually..."
-    sudo -u jenkins JAVA_HOME=$JAVA_HOME nohup java -Dhudson.security.csrf.GlobalCrumbIssuerConfiguration.DISABLE_CSRF_PROTECTION=true -Djava.awt.headless=true -jar /usr/share/java/jenkins.war --httpPort=8080 > /var/log/jenkins-manual.log 2>&1 &
+    sudo -u jenkins JAVA_HOME=$JAVA_HOME nohup java -Dhudson.security.csrf.GlobalCrumbIssuerConfiguration.DISABLE_CSRF_PROTECTION=true -Dhudson.TcpSlaveAgentListener.port=50000 -Djava.awt.headless=true -jar /usr/share/java/jenkins.war --httpPort=8080 > /var/log/jenkins-manual.log 2>&1 &
     echo "Jenkins started manually"
     JENKINS_START_METHOD="manual"
 fi
@@ -203,7 +203,7 @@ cat > /var/lib/jenkins/config.xml << 'EOF'
     </hudson.model.AllView>
   </views>
   <primaryView>all</primaryView>
-  <slaveAgentPort>-1</slaveAgentPort>
+  <slaveAgentPort>50000</slaveAgentPort>
   <clouds/>
 </hudson>
 EOF

@@ -1,0 +1,181 @@
+<script>
+@echo off
+REM Windows Jenkins JNLP Agent Auto-Connect Script
+echo === Starting Windows Jenkins Agent Setup ===
+echo Time: %date% %time%
+
+REM Create log file
+set LOG_FILE=C:\jenkins-agent-setup.log
+echo === Starting Windows Jenkins Agent Setup === > %LOG_FILE%
+echo Time: %date% %time% >> %LOG_FILE%
+
+REM Get instance metadata using IMDSv2
+echo === Getting Instance Metadata === >> %LOG_FILE%
+REM Get IMDSv2 token
+curl.exe -X PUT http://169.254.169.254/latest/api/token -H X-aws-ec2-metadata-token-ttl-seconds:21600 -s > C:\token.txt 2>nul
+set /p TOKEN=<C:\token.txt
+REM Get instance ID using token
+curl.exe -H X-aws-ec2-metadata-token:%TOKEN% -s http://169.254.169.254/latest/meta-data/instance-id > C:\instance-id.txt 2>nul
+set /p INSTANCE_ID=<C:\instance-id.txt
+if "%INSTANCE_ID%"=="" set INSTANCE_ID=%COMPUTERNAME%
+echo Instance ID: %INSTANCE_ID% >> %LOG_FILE%
+
+REM Jenkins Master configuration
+set JENKINS_MASTER_IP=10.0.0.154
+set JENKINS_URL=http://%JENKINS_MASTER_IP%:8080
+set JENKINS_USER=valyli
+set JENKINS_TOKEN=11e60bc68521d47c1f32944d4045590e25
+set AGENT_NAME=windows-agent-%INSTANCE_ID%
+set WORK_DIR=C:\jenkins
+
+echo Jenkins URL: %JENKINS_URL% >> %LOG_FILE%
+echo Agent Name: %AGENT_NAME% >> %LOG_FILE%
+
+REM Create work directory
+mkdir %WORK_DIR% 2>nul
+cd /d %WORK_DIR%
+
+REM Download and install Java
+echo === Installing Java === >> %LOG_FILE%
+set JAVA_HOME=
+REM Check if Java already exists
+for /d %%i in ("C:\Program Files\Java\jdk*") do (
+    if exist "%%i\bin\java.exe" (
+        set JAVA_HOME=%%i
+        echo Java already installed at: %%i >> %LOG_FILE%
+    )
+)
+
+if "%JAVA_HOME%"=="" (
+    echo Downloading Java... >> %LOG_FILE%
+    curl.exe -L --connect-timeout 30 --max-time 300 -o corretto-17.zip https://corretto.aws/downloads/latest/amazon-corretto-17-x64-windows-jdk.zip
+    if not exist corretto-17.zip (
+        echo ERROR: Java download failed - file not created >> %LOG_FILE%
+        exit /b 1
+    )
+    REM Check if file has content (not empty)
+    for %%i in (corretto-17.zip) do (
+        if %%~zi LSS 1000000 (
+            echo ERROR: Java download failed - file too small: %%~zi bytes >> %LOG_FILE%
+            exit /b 1
+        )
+    )
+    echo Java downloaded, extracting... >> %LOG_FILE%
+    mkdir "C:\Program Files\Java" 2>nul
+    tar -xf corretto-17.zip -C "C:\Program Files\Java"
+    REM Find the extracted Java directory
+    for /d %%i in ("C:\Program Files\Java\jdk*") do (
+        if exist "%%i\bin\java.exe" (
+            set JAVA_HOME=%%i
+            echo Java extracted to: %%i >> %LOG_FILE%
+        )
+    )
+)
+
+if "%JAVA_HOME%"=="" (
+    echo ERROR: Java installation failed >> %LOG_FILE%
+    exit /b 1
+)
+
+set PATH=%PATH%;%JAVA_HOME%\bin
+echo Java ready at: %JAVA_HOME% >> %LOG_FILE%
+
+REM Download and setup Python portable
+echo === Installing Python Portable === >> %LOG_FILE%
+set PYTHON_HOME=C:\Python311
+if not exist "%PYTHON_HOME%\python.exe" (
+    echo Downloading Python portable... >> %LOG_FILE%
+    curl.exe -L --connect-timeout 30 --max-time 300 -o python-3.11.zip https://www.python.org/ftp/python/3.11.9/python-3.11.9-embed-amd64.zip
+    if not exist python-3.11.zip (
+        echo ERROR: Python download failed >> %LOG_FILE%
+        exit /b 1
+    )
+    echo Extracting Python... >> %LOG_FILE%
+    mkdir "%PYTHON_HOME%" 2>nul
+    tar -xf python-3.11.zip -C "%PYTHON_HOME%"
+    echo Python extracted to: %PYTHON_HOME% >> %LOG_FILE%
+) else (
+    echo Python already exists at: %PYTHON_HOME% >> %LOG_FILE%
+)
+set PATH=%PATH%;%PYTHON_HOME%
+echo Python ready at: %PYTHON_HOME% >> %LOG_FILE%
+
+REM Wait for Jenkins Master
+echo === Waiting for Jenkins Master === >> %LOG_FILE%
+:WAIT_JENKINS
+curl.exe -s -o nul -w "%%{http_code}" %JENKINS_URL%/login | findstr "200 403" >nul
+if %errorlevel% neq 0 (
+    echo Jenkins not ready, waiting... >> %LOG_FILE%
+    timeout /t 10 /nobreak >nul
+    goto WAIT_JENKINS
+)
+echo Jenkins Master is ready >> %LOG_FILE%
+
+REM Install curl if not available
+REM curl should be available in Windows 10/Server 2019+
+
+REM Download Jenkins Agent JAR
+echo === Downloading Jenkins Agent JAR === >> %LOG_FILE%
+curl.exe -o "%WORK_DIR%\agent.jar" "%JENKINS_URL%/jnlpJars/agent.jar"
+
+REM Download Jenkins CLI
+echo === Downloading Jenkins CLI === >> %LOG_FILE%
+curl.exe -o "%WORK_DIR%\jenkins-cli.jar" "%JENKINS_URL%/jnlpJars/jenkins-cli.jar"
+
+REM Create node XML config
+echo === Creating Node Config === >> %LOG_FILE%
+(
+echo ^<slave^>
+echo   ^<name^>%AGENT_NAME%^</name^>
+echo   ^<description^>Auto-created Windows Agent^</description^>
+echo   ^<remoteFS^>%WORK_DIR%^</remoteFS^>
+echo   ^<numExecutors^>2^</numExecutors^>
+echo   ^<mode^>NORMAL^</mode^>
+echo   ^<retentionStrategy class="hudson.slaves.RetentionStrategy$Always"/^>
+echo   ^<launcher class="hudson.slaves.JNLPLauncher"^>
+echo     ^<workDirSettings^>
+echo       ^<disabled^>false^</disabled^>
+echo       ^<workDirPath^>%WORK_DIR%^</workDirPath^>
+echo       ^<internalDir^>remoting^</internalDir^>
+echo       ^<failIfWorkDirIsMissing^>false^</failIfWorkDirIsMissing^>
+echo     ^</workDirSettings^>
+echo   ^</launcher^>
+echo   ^<label^>windows auto^</label^>
+echo   ^<nodeProperties/^>
+echo ^</slave^>
+) > node-config.xml
+
+REM Create node using Jenkins CLI
+echo === Creating Jenkins Node === >> %LOG_FILE%
+type node-config.xml | "%JAVA_HOME%\bin\java.exe" -jar jenkins-cli.jar -s %JENKINS_URL% -auth %JENKINS_USER%:%JENKINS_TOKEN% create-node %AGENT_NAME% >> %LOG_FILE% 2>&1
+
+REM Download agent.jar
+echo === Downloading Agent JAR === >> %LOG_FILE%
+curl.exe -sO %JENKINS_URL%/jnlpJars/agent.jar
+
+REM Get JNLP secret from Jenkins API
+echo === Getting JNLP Secret === >> %LOG_FILE%
+curl.exe -s -u %JENKINS_USER%:%JENKINS_TOKEN% %JENKINS_URL%/computer/%AGENT_NAME%/jenkins-agent.jnlp > jnlp.xml
+REM Use Python to extract secret from downloaded JNLP file
+echo import re > extract_secret.py
+echo with open('jnlp.xml', 'r') as f: >> extract_secret.py
+echo     content = f.read() >> extract_secret.py
+echo match = re.search(r"<argument>([^<]+)</argument>", content) >> extract_secret.py
+echo if match: >> extract_secret.py
+echo     print(match.group(1)) >> extract_secret.py
+echo else: >> extract_secret.py
+echo     print('FAILED') >> extract_secret.py
+for /f "delims=" %%i in ('"%PYTHON_HOME%\python.exe" extract_secret.py') do set JNLP_SECRET=%%i
+echo JNLP Secret: %JNLP_SECRET% >> %LOG_FILE%
+
+if "%JNLP_SECRET%"=="FAILED" (
+    echo ERROR: Could not obtain JNLP secret >> %LOG_FILE%
+    exit /b 1
+)
+
+REM Start Jenkins Agent directly
+echo === Starting Jenkins Agent === >> %LOG_FILE%
+"%JAVA_HOME%\bin\java.exe" -jar "%WORK_DIR%\agent.jar" -url %JENKINS_URL%/ -secret %JNLP_SECRET% -name "%AGENT_NAME%" -workDir "%WORK_DIR%" >> %LOG_FILE% 2>&1
+
+echo === Setup Complete === >> %LOG_FILE%
+</script>
