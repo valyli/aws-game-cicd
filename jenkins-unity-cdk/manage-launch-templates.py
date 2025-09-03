@@ -181,7 +181,7 @@ def main():
                 'name': 'jenkins-windows-agent-template', 
                 'image_id': 'ami-028dc1123403bd543',  # Windows Server 2022
                 'instance_type': 'c5.large',
-                'script_path': 'windows-jnlp-agent-userdata.ps1',
+                'script_path': 'windows-batch-userdata.txt',
                 'volume_size': 50
             }
         }
@@ -209,7 +209,7 @@ def main():
         
         script_files = {
             'linux': 'linux-jnlp-agent-userdata.sh',
-            'windows': 'windows-jnlp-agent-userdata.ps1'
+            'windows': 'windows-batch-userdata.txt'
         }
         
         template_names = {

@@ -56,10 +56,8 @@ security:
   globalJobDslSecurityConfiguration:
     useScriptSecurity: false
   
-  # CSRF protection
-  crumbIssuer:
-    standard:
-      excludeClientIPFromCrumb: false
+  # 完全关闭CSRF保护
+  # crumbIssuer: null
 
 # Tool configuration
 tool:

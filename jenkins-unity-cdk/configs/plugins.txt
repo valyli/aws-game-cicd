@@ -19,6 +19,7 @@ xvfb:1.1.3
 
 # AWS plugins
 ec2:1.76
+ec2-fleet:4.2.1.515.v100267825939
 aws-credentials:191.vcb_f183ce58b_9
 
 # Build and deployment
