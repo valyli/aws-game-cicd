@@ -352,3 +352,110 @@ node('unity-linux') {
 4. **Master** 通过 Agent JAR 远程执行命令
 
 这样，Master 就能完全控制 Agent 的行为，包括 Unity 构建、测试、部署等所有操作！
+
+## EC2 Fleet Plugin 工作机制深度解析
+
+### 核心工作原理确认
+
+**连接方式对比**：
+- **Linux Agent**: Jenkins Master ↔ SSH ↔ Linux Agent
+- **Windows Agent**: Jenkins Master ↔ JNLP ↔ Windows Agent
+- **EC2 Fleet Plugin**: 通过这些连接协议来识别和管理Fleet中的实例
+
+### Fleet Plugin 完整工作流程
+
+```
+1. Jenkins Job 触发 (label: 'windows unity fleet')
+     ↓
+2. Fleet Plugin 检测到需求
+     ↓
+3. 启动 EC2 实例 (使用 Launch Template)
+     ↓
+4. User Data 脚本执行
+     ↓
+5. Agent 下载 agent.jar 并连接 Jenkins
+     ↓
+6. Plugin 通过标签识别为 Fleet 成员
+     ↓
+7. 执行构建任务
+     ↓
+8. 空闲超时后自动终止实例
+```
+
+### 关键技术要点
+
+#### 1. 标签匹配机制
+```powershell
+# Fleet 专用脚本中的关键配置
+$agentLabels = "windows unity fleet auto"
+
+# Jenkins Pipeline 中的使用
+pipeline {
+    agent {
+        label 'windows unity fleet'  // 触发 Fleet 扩容
+    }
+}
+```
+
+#### 2. Fleet vs 手动管理对比
+
+**现有手动方式**：
+```
+手动启动实例 → Agent连接 → 手动管理生命周期 → 手动终止
+```
+
+**Fleet自动方式**：
+```
+Jenkins需要时 → Fleet自动启动 → Agent连接 → 空闲时自动终止
+```
+
+#### 3. 实施步骤总结
+
+**步骤1**: 创建Fleet专用Launch Template
+- 使用 `windows-fleet-userdata.ps1` 脚本
+- 确保包含正确的Fleet标签配置
+
+**步骤2**: 配置EC2 Fleet Plugin
+- Jenkins > 系统管理 > 节点管理 > Configure Clouds
+- 添加 "Amazon EC2 Fleet"
+- 配置Launch Template和标签匹配
+
+**步骤3**: 测试自动扩缩容
+- 创建使用Fleet标签的Pipeline
+- 验证实例自动启动和终止
+
+### Windows Fleet 特殊考虑
+
+#### JNLP连接特点
+- Windows使用JNLP而非SSH连接
+- 需要更长的启动超时时间
+- 服务化运行确保连接稳定性
+
+#### Fleet兼容性配置
+```xml
+<!-- Fleet专用节点配置 -->
+<slave>
+  <name>fleet-windows-agent-{instanceId}</name>
+  <label>windows unity fleet auto</label>
+  <launcher class="hudson.slaves.JNLPLauncher">
+    <!-- JNLP配置 -->
+  </launcher>
+</slave>
+```
+
+### 核心结论
+
+**EC2 Fleet Plugin的本质**：
+- 通过标签匹配自动管理实例生命周期
+- 依赖标准的Jenkins Master-Agent连接协议
+- 将手动的实例管理自动化
+
+**实施关键**：
+- 正确的Launch Template配置
+- 一致的标签策略
+- 适当的超时和连接参数
+
+**最终效果**：
+- Jenkins根据构建需求自动扩缩容
+- 开发者无需关心基础设施管理
+- 成本优化：按需使用，空闲自动释放
