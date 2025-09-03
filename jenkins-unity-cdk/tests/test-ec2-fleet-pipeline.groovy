@@ -54,9 +54,14 @@ pipeline {
                     } else {
                         bat '''
                             echo === EC2 Instance Metadata ===
-                            for /f %%i in ('powershell -Command "Invoke-RestMethod -Uri http://169.254.169.254/latest/api/token -Method PUT -Headers @{\"X-aws-ec2-metadata-token-ttl-seconds\"=\"21600\"}"') do set TOKEN=%%i
-                            for /f %%i in ('powershell -Command "Invoke-RestMethod -Uri http://169.254.169.254/latest/meta-data/instance-id -Headers @{\"X-aws-ec2-metadata-token\"=\"%TOKEN%\"}"') do echo Instance ID: %%i
-                            for /f %%i in ('powershell -Command "Invoke-RestMethod -Uri http://169.254.169.254/latest/meta-data/instance-type -Headers @{\"X-aws-ec2-metadata-token\"=\"%TOKEN%\"}"') do echo Instance Type: %%i
+                            curl -X PUT "http://169.254.169.254/latest/api/token" -H "X-aws-ec2-metadata-token-ttl-seconds: 21600" -s > token.txt
+                            set /p TOKEN=<token.txt
+                            curl -H "X-aws-ec2-metadata-token: %TOKEN%" -s http://169.254.169.254/latest/meta-data/instance-id > instance-id.txt
+                            set /p INSTANCE_ID=<instance-id.txt
+                            curl -H "X-aws-ec2-metadata-token: %TOKEN%" -s http://169.254.169.254/latest/meta-data/instance-type > instance-type.txt
+                            set /p INSTANCE_TYPE=<instance-type.txt
+                            echo Instance ID: %INSTANCE_ID%
+                            echo Instance Type: %INSTANCE_TYPE%
                         '''
                     }
                 }
